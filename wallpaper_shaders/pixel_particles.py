@@ -1,12 +1,43 @@
-from typing import Tuple
+import logging
+import json
+from typing import Any, Tuple, List
+
 import moderngl_window as mglw
 from moderngl_window import geometry
 import moderngl
 import numpy as np
 from PIL import Image
+from pydantic import BaseSettings, ValidationError, validator
 
-from common import image_path, RESOURCES_PATH
-from wallpaper_shader_win import WallpaperWindow
+from wallpaper_shaders.common import image_path, RESOURCES_DIRECTORY, CONFIG_DIRECTORY
+from wallpaper_shaders.wallpaper_shader_win import WallpaperWindow
+from wallpaper_shaders.utils import resize_with_padding
+
+class Config(BaseSettings):
+    image: str = "mask.png"
+    color_treshold: Tuple[int, int, int, int] = (10, 10, 10, 255)
+    pull: float = 0.5
+    push: float = 1.0
+    close_treshold: float = 1.0
+    drag: float = 0.99
+
+    @validator("color_treshold")
+    @classmethod
+    def color_4_elements(cls, variable):
+        if len(variable) != 4:
+            raise ValueError("Color must be set as rgba")
+        return tuple(variable)
+    
+    @validator("image")
+    @classmethod
+    def image_exists(cls, variable):
+        try:
+            Image.open(image_path(variable)).close()
+        except FileNotFoundError:
+            raise ValueError("Image not found.")
+        except (OSError, ValueError, TypeError):
+            raise ValueError("Error while loading the Image")
+        return variable
 
 class ComputeRender(WallpaperWindow):
     """
@@ -15,14 +46,20 @@ class ComputeRender(WallpaperWindow):
     Some values are set by default: u_resolution, u_time, u_mouse
     """
     gl_version = (4, 3)
-    aspect_ratio = None
 
     #COMPUTE_SIZE_X = 8
 
-    resource_dir = RESOURCES_PATH
+    resource_dir = RESOURCES_DIRECTORY
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        try:
+            with open(CONFIG_DIRECTORY.joinpath("config_pixel_particles.json")) as file:
+                config_json = json.load(file)
+            self.config = Config(**config_json)
+        except (ValidationError, json.JSONDecodeError) as error:
+            logging.error("config.json is invalid", exc_info=error)
+            raise
 
         self.count = 0  # number of agents
         self.STRUCT_SIZE = 12  # number of floats per agent
@@ -31,7 +68,13 @@ class ComputeRender(WallpaperWindow):
         self.view_prog = self.load_program("view.glsl")
 
         self.pixel_shader = self.load_compute_shader(
-            "pixel_particles.glsl"
+            "pixel_particles.glsl",
+            defines={
+                "_pull_": self.config.pull,
+                "_push_": self.config.push,
+                "_close_treshold_": self.config.close_treshold,
+                "_drag_": self.config.drag
+            }
         )
 
         self.difuse_shader = self.load_compute_shader(
@@ -41,14 +84,15 @@ class ComputeRender(WallpaperWindow):
         self.random_generator: np.random.Generator = np.random.default_rng()
 
         # Load Mask and generate afents from it
-        mask_name = "flower.png"
+        mask_name = self.config.image
 
         mask_image = Image.open(image_path(mask_name))
+        mask_image = resize_with_padding(mask_image, self.window_size)
 
         self.mask = np.asarray(mask_image)
-        mask_proccesed = np.transpose(np.where(np.any(self.mask > (10, 10, 10, 255), axis=-1)))
+        mask_proccesed = np.transpose(np.where(np.any(self.mask > self.config.color_treshold, axis=-1)))
 
-        self.agents =[]
+        self.agents = []
         #hacky way to generate all agents
         [self.generate_initial_mask(cords) for cords in mask_proccesed]
         self.mask_texture = self.load_texture_2d(mask_name)
@@ -106,7 +150,7 @@ class ComputeRender(WallpaperWindow):
         self.agents.append(self.mask[cords[0]][cords[1]][3]/255) # a
         # also add color
 
-    def set_uniform(self, name, value):
+    def set_uniform(self, name, value: Any):
         """Method for inputting a value to a uniform."""
         try:
             self.pixel_shader[name].value = value
@@ -159,7 +203,7 @@ class ComputeRender(WallpaperWindow):
 
         #bind angents
         self.agent_buffer.bind_to_storage_buffer(2)
-        
+
         #self.mask_texture.bind_to_image(3, read=True, write=False)
 
         self.pixel_shader.run(self.count // 16 + 1, 1, 1)
@@ -182,8 +226,5 @@ class ComputeRender(WallpaperWindow):
         return super().close()
 
 def main():
+    """Function to run all stuff required by the shader"""
     mglw.run_window_config(ComputeRender)
-
-
-if __name__ == "__main__":
-    main()

@@ -1,0 +1,8 @@
+{
+    "image": "flower.png",
+    "color_treshold": [10, 10, 10, 255],
+    "pull": 0.5,
+    "push": 1.0,
+    "close_treshold": 1.0,
+    "drag": 0.99
+}

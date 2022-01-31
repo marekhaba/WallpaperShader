@@ -1,5 +1,9 @@
+"""
+Contains baseclass for all moderngl programs supposed to be run as the wallpaper.
+"""
 import ctypes
 from typing import Tuple
+
 import moderngl_window as mglw
 
 user32 = ctypes.WinDLL("user32")
@@ -23,7 +27,7 @@ def find_workerw_handle() -> int:
     # Find newly created WorkerW window
     workerw = []
 
-    def EnumWindowsProc(hwnd, _lparam):
+    def enum_windows_proc(hwnd, _lparam):
         handle = user32.FindWindowExW(hwnd, 0, "SHELLDLL_DefView", 0)
         if handle != 0:
             # hacky way to get workerw value out of this function
@@ -33,15 +37,16 @@ def find_workerw_handle() -> int:
     WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL,
                                      ctypes.wintypes.HWND,
                                      ctypes.wintypes.LPARAM)
-    EnumWindowsProc_winfunc = WNDENUMPROC(EnumWindowsProc)
+    enum_windows_proc_winfunc = WNDENUMPROC(enum_windows_proc)
 
-    user32.EnumWindows(EnumWindowsProc_winfunc, 0)
+    user32.EnumWindows(enum_windows_proc_winfunc, 0)
 
     return workerw.pop()
 
 # Get cursor position
 # https://stackoverflow.com/a/24567802
 class POINT(ctypes.Structure):
+    """Structure to get x, y out of GetCursorPos"""
     _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
 
 def get_mouse_position() -> Tuple[int, int]:
@@ -53,12 +58,13 @@ def get_mouse_position() -> Tuple[int, int]:
 
 class WallpaperWindow(mglw.WindowConfig):
     """
-    Window Config class setup to render as a wallpaper.
+    ``Window Config`` class setup to render as a wallpaper.
     Subclasses should also call super() methods.
     """
 
     fullscreen = True
     window_size = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+    aspect_ratio = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

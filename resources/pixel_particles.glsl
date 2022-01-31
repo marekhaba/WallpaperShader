@@ -1,6 +1,10 @@
 #version 430 core
 
 #define PI 3.14159265359
+#define PULL 0.5 // pull toward original position
+#define PUSH 1.0 // push away from the mouse
+#define CLOSE_TRESHOLD 1.0 // How close point need to be to think they are in a right spot
+#define DRAG 0.99
 
 layout (local_size_x = 16, local_size_y = 1) in;
 
@@ -51,11 +55,8 @@ void main()
 {
     //Constants
     vec2 IMAGE_SIZE = vec2(imageSize(img_input));
-    float pull = 0.5; // pull toward original position
-    float push = 500.0; // push away from the mouse
-    float close_treshold = 1.0; // How close point need to be to think they are in a right spot
-    //float force_treshold = 0.1; // How large the dorce has to be to have any effect
-    float drag = 0.99;
+
+    //float force_treshold = 0.1; // How large the force has to be to have any effect
 
     //Do not execute if there are no more agents
     //Easy workaround around having to be precise with job count
@@ -74,16 +75,16 @@ void main()
     float distance_mouse = distance_line(mouse, mouse-delta_mouse, pos);
     vec2 force = delta_mouse/max(distance_mouse, 1.0);
     //if (abs(force[0])+abs(force[1]) > force_treshold){
-    velocity += force;//vec2(cos(-angle), sin(-angle))*force;
+    velocity += force*PUSH;//vec2(cos(-angle), sin(-angle))*force;
     //}
     //pull
     float distance_original = distance(original_postion, pos);
-    if (distance_original > close_treshold){
+    if (distance_original > CLOSE_TRESHOLD){
         angle = angle_to_point(original_postion, pos);
-        velocity += vec2(cos(angle), sin(angle))*pull;
+        velocity += vec2(cos(angle), sin(angle))*PULL;
     }
 
-    velocity *= drag;
+    velocity *= DRAG;
 
     vec2 newpos = pos+velocity;
 
