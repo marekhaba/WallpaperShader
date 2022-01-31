@@ -6,6 +6,8 @@ from typing import Tuple
 
 import moderngl_window as mglw
 
+from wallpaper_shaders.common import RESOURCES_DIRECTORY
+
 user32 = ctypes.WinDLL("user32")
 
 def find_workerw_handle() -> int:
@@ -61,6 +63,8 @@ class WallpaperWindow(mglw.WindowConfig):
     ``Window Config`` class setup to render as a wallpaper.
     Subclasses should also call super() methods.
     """
+
+    resource_dir = RESOURCES_DIRECTORY
 
     fullscreen = True
     window_size = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)

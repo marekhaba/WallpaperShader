@@ -1,6 +1,6 @@
 import logging
 import json
-from typing import Any, Tuple, List
+from typing import Tuple
 
 import moderngl_window as mglw
 from moderngl_window import geometry
@@ -20,8 +20,8 @@ class Config(BaseSettings):
     push: float = 1.0
     close_treshold: float = 1.0
     drag: float = 0.99
-    decay: Tuple[float, float, float, float] = (0.01, 0.01, 0.01, 0.0)
-    diffuse: Tuple[float, float, float, float] = (0.9, 0.9, 0.9, 1.0)
+    decay: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    diffuse: Tuple[float, float, float, float] = (0.05, 0.001, 0.001, 1.0)
 
     @validator("color_treshold")
     @classmethod
@@ -58,10 +58,12 @@ class ComputeRender(WallpaperWindow):
     """
     gl_version = (4, 3)
 
+    resource_dir = RESOURCES_DIRECTORY
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         try:
-            with open(CONFIG_DIRECTORY.joinpath("config_pixel_particles.json")) as file:
+            with open(CONFIG_DIRECTORY.joinpath("config_pixel_particles_single_color.json")) as file:
                 config_json = json.load(file)
             self.config = Config(**config_json)
         except (ValidationError, json.JSONDecodeError) as error:
@@ -69,13 +71,13 @@ class ComputeRender(WallpaperWindow):
             raise
 
         self.count = 0  # number of agents
-        self.STRUCT_SIZE = 12  # number of floats per agent
+        self.STRUCT_SIZE = 8  # number of floats per agent
 
         self.ctx: moderngl.Context
         self.view_prog = self.load_program("view.glsl")
 
         self.pixel_shader = self.load_compute_shader(
-            "pixel_particles.glsl",
+            "pixel_particles_single_color.glsl",
             defines={
                 "PULL": self.config.pull,
                 "PUSH": self.config.push,
@@ -134,23 +136,18 @@ class ComputeRender(WallpaperWindow):
         Apply over a numpy array containing cords
         as a side effect appends agents to agent list
         """
-        # this should be sped up
         # cords[1] = x cords[0] = y for some reason thx numpy
         y = self.window_size[1] - cords[0]
         self.agents.append(cords[1]) # x
         self.agents.append(y) # y
-        self.agents.append(0.0) # padding 1
-        self.agents.append(0.0) # padding 2
+        self.agents.append(self.random_generator.random() * 2 * np.pi) # angle mby remove
+        self.agents.append(0.0) # padding
         self.agents.append(0.0) # velocity x
         self.agents.append(0.0) # velocity y
         self.agents.append(cords[1]) # original x
         self.agents.append(y) # original y
-        self.agents.append(self.mask[cords[0]][cords[1]][0]/255) # r
-        self.agents.append(self.mask[cords[0]][cords[1]][1]/255) # g
-        self.agents.append(self.mask[cords[0]][cords[1]][2]/255) # b
-        self.agents.append(self.mask[cords[0]][cords[1]][3]/255) # a
 
-    def set_uniform(self, name, value: Any):
+    def set_uniform(self, name, value):
         """Method for inputting a value to a uniform."""
         try:
             self.pixel_shader[name].value = value
@@ -165,16 +162,11 @@ class ComputeRender(WallpaperWindow):
             self.set_uniform("mouse", (x, self.window_size[1]-y))
             self.set_uniform("delta_mouse", (0, 0))
 
-    @classmethod
-    def add_arguments(cls, parser):
-        """Add commmand line arguments"""
-        return
-
     def render(self, time, frame_time):
         super().render(time, frame_time)
         self.ctx.clear(0.2, 0.2, 0.2)
 
-        self.set_uniform("time", time)
+        self.set_uniform("u_time", time)
 
         # Switch Previous Texture
         if self.odd:
@@ -189,15 +181,17 @@ class ComputeRender(WallpaperWindow):
         read_texture.bind_to_image(0, read=True, write=False)
         write_texture.bind_to_image(1, read=False, write=True)
 
-        # diffuse pixels
+        #diffuse pixels
         self.diffuse_shader.run(self.window_size[0] // 32 +1, self.window_size[1] // 32 +1, 1)
 
         # bind angents
         self.agent_buffer.bind_to_storage_buffer(2)
-
+        
         self.mask_texture.bind_to_image(3, read=True, write=False)
 
         self.pixel_shader.run(self.count // 16 + 1, 1, 1)
+
+        # self.difuse_shader.run(self.window_size[0] // 32 + 1, self.window_size[1] // 32 + 1, 1)
 
         # Render texture
         read_texture.use(0)
@@ -218,3 +212,7 @@ class ComputeRender(WallpaperWindow):
 def main():
     """Function to run all stuff required by the shader"""
     mglw.run_window_config(ComputeRender)
+
+
+if __name__ == "__main__":
+    main()

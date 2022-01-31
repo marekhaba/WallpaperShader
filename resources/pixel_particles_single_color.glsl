@@ -17,10 +17,10 @@ uniform float agents_count;
 struct Agent
 {
     vec2 position;
-    vec2 padding;
+    float angle;
+    float padding;
     vec2 velocity;
     vec2 original_postion;
-    vec4 color;
 };
 
 layout (std430, binding = 2) buffer AgentsBlock
@@ -28,12 +28,12 @@ layout (std430, binding = 2) buffer AgentsBlock
     Agent agents[];
 } input_data;
 
-//layout (binding = 3, rgba8) readonly uniform image2D mask;
+layout (binding = 3, rgba8) readonly uniform image2D mask;
 
 uniform vec2 mouse;
 uniform vec2 delta_mouse;
 
-uniform float time;
+
 
 float random(float x){ //mby get better random
     return fract(sin(x)*100000.0);
@@ -56,8 +56,7 @@ void main()
 {
     //Constants
     vec2 IMAGE_SIZE = vec2(imageSize(img_input));
-
-    //float force_treshold = 0.1; // How large the force has to be to have any effect
+    //float force_treshold = 0.1; // How large the dorce has to be to have any effect
 
     //Do not execute if there are no more agents
     //Easy workaround around having to be precise with job count
@@ -66,24 +65,23 @@ void main()
         return;
     }
 
-    float t = sin(time);
-
     vec2 pos = input_data.agents[i].position;
+    float angle = input_data.agents[i].angle;
     vec2 velocity = input_data.agents[i].velocity;
-    vec2 original_postion = input_data.agents[i].original_postion;
 
-    float angle = angle_to_point(mouse, pos);
+    angle = angle_to_point(mouse, pos);
     float distance_mouse = distance_line(mouse, mouse-delta_mouse, pos);
     vec2 force = delta_mouse/max(distance_mouse, 1.0);
     //if (abs(force[0])+abs(force[1]) > force_treshold){
     velocity += force*PUSH;//vec2(cos(-angle), sin(-angle))*force;
     //}
     //pull
-    float distance_original = distance(original_postion, pos);
+    float distance_original = distance(input_data.agents[i].original_postion, pos);
     if (distance_original > CLOSE_TRESHOLD){
-        angle = angle_to_point(original_postion, pos);
+        angle = angle_to_point(input_data.agents[i].original_postion, pos);
         velocity += vec2(cos(angle), sin(angle))*PULL;
     }
+    
 
     velocity *= DRAG;
 
@@ -96,19 +94,10 @@ void main()
     else
     {
         vec4 prev_val = imageLoad(img_input, ivec2(newpos));
-        //imageStore(img_output, ivec2(newpos), prev_val+vec4(0.005*distance_original/10, 0.0075, 0.105, 1.0)*2.75);
-        float cut_color = max((distance_original/IMAGE_SIZE.x)*0.05 + (abs(velocity.x)+abs(velocity.y))*0.2, 1.0);
-        vec4 new_color = input_data.agents[i].color;
-        new_color.r *= cut_color;
-        new_color.g *= max(cut_color*0.5, 1.0);
-        imageStore(img_output, ivec2(newpos), clamp(new_color, 0.0, 1.0));
+        imageStore(img_output, ivec2(newpos), prev_val+vec4(0.01*distance_original/10, 0.0175, 0.205, 1.0)*2.75);
         //imageStore(img_output, ivec2(newpos), vec4(0.8549, 0.398, 0.6745, 1.0)*0.5);
     }
     input_data.agents[i].position = newpos;
     input_data.agents[i].velocity = velocity;
 
-    //input_data.agents[i].original_postion = original_postion + vec2(0.0, t*IMAGE_SIZE.x/1000.0);
-
-    //barrier();
-    //memoryBarrierShared();
 }
